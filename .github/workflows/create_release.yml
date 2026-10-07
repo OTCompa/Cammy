@@ -12,7 +12,7 @@ jobs:
   release:
     uses: UnknownX7/DalamudPluginRepo/.github/workflows/reusable_create_release.yml@master
     with:
-      internal_name: Cammy
+      internal_name: CammyFrey
       solution_name: Cammy
       build_configuration: Release
       personal_plugin_repo: UnknownX7/DalamudPluginRepo
