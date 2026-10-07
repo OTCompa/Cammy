@@ -105,11 +105,7 @@ public static unsafe class FreeCam
             speed = 1;
             velocity = Vector3.Zero;
             pathPlaying = false;
-
-            position = new Vector3(-23.360052f, 17.704718f, 23.21559f);
-            gameCamera->currentHRotation = -0.773512f;
-            gameCamera->currentVRotation = -0.58100265f;
-
+            position = new(gameCamera->viewX, gameCamera->viewY, gameCamera->viewZ);
             onDeath = death;
             prevPresetOverride = PresetManager.PresetOverride;
             prevZoom = gameCamera->currentZoom;
@@ -196,7 +192,7 @@ public static unsafe class FreeCam
             CheckDeath();
 
         if (!Enabled) return;
-        DalamudApi.LogDebug($"Pos ({gameCamera->x}f, {gameCamera->y}f, {gameCamera->z}f)\nRotation {gameCamera->currentHRotation}f {gameCamera->currentVRotation}f");
+
         if (InputData.isInputIDPressed.Original(Common.InputData, keybindings[FreeCamBindings.ToggleLock]) || InputData.isInputIDReleased.Original(Common.InputData, keybindings[FreeCamBindings.ControllerToggleLock]))
         {
             locked ^= true;
