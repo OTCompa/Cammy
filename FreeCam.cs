@@ -37,6 +37,9 @@ public static unsafe class FreeCam
     private static bool displayedControls = false;
     private static readonly List<(Vector3, Vector2)> savedPositions = [];
     private static float advancedControlsAlpha;
+    private static Vector3 velocity;
+    private static bool pathPlaying = false;
+    private static float pathTime;
 
     private enum FreeCamBindings
     {
@@ -100,6 +103,8 @@ public static unsafe class FreeCam
 
             locked = false;
             speed = 1;
+            velocity = Vector3.Zero;
+            pathPlaying = false;
 
             position = new Vector3(-23.360052f, 17.704718f, 23.21559f);
             gameCamera->currentHRotation = -0.773512f;
@@ -134,6 +139,7 @@ public static unsafe class FreeCam
         else
         {
             DisableInputBlockers();
+            pathPlaying = false;
 
             if (!isMainMenu)
             {
@@ -213,7 +219,19 @@ public static unsafe class FreeCam
             return;
         }
 
-        if (locked) return;
+        var dt = (float)DalamudApi.Framework.UpdateDelta.TotalSeconds;
+
+        if (pathPlaying)
+        {
+            UpdatePath(dt);
+            return;
+        }
+
+        if (locked)
+        {
+            velocity = Vector3.Zero;
+            return;
+        }
 
         var movePos = Vector3.Zero;
 
@@ -260,9 +278,9 @@ public static unsafe class FreeCam
             }
         }
 
-        if (movePos == Vector3.Zero) return;
+        if (movePos == Vector3.Zero && velocity == Vector3.Zero) return;
 
-        movePos *= (float)(DalamudApi.Framework.UpdateDelta.TotalSeconds * 20) * speed;
+        movePos *= 20 * speed;
 
         if (ImGui.GetIO().KeyShift) // Shift
             movePos *= 10;
@@ -272,9 +290,21 @@ public static unsafe class FreeCam
         var direction = new Vector3(MathF.Cos(hAngle) * MathF.Cos(vAngle), MathF.Sin(vAngle), -(MathF.Sin(hAngle) * MathF.Cos(vAngle)));
 
         var amount = direction * movePos.X;
-        var x = amount.X + movePos.Z * MathF.Sin(gameCamera->currentHRotation - halfPI);
-        var y = amount.Y + movePos.Y;
-        var z = amount.Z + movePos.Z * MathF.Cos(gameCamera->currentHRotation - halfPI);
+        var targetVelocity = new Vector3(
+            amount.X + movePos.Z * MathF.Sin(gameCamera->currentHRotation - halfPI),
+            amount.Y + movePos.Y,
+            amount.Z + movePos.Z * MathF.Cos(gameCamera->currentHRotation - halfPI));
+
+        velocity = Vector3.Lerp(velocity, targetVelocity, Easing.SmoothingFactor(Cammy.Config.FreeCamMovementSmoothing, dt));
+        if (movePos == Vector3.Zero && velocity.LengthSquared() < 0.0001f)
+        {
+            velocity = Vector3.Zero;
+            return;
+        }
+
+        var x = velocity.X * dt;
+        var y = velocity.Y * dt;
+        var z = velocity.Z * dt;
 
         if (loggedIn)
         {
@@ -290,11 +320,116 @@ public static unsafe class FreeCam
         }
     }
 
+    private static void UpdatePath(float dt)
+    {
+        if (savedPositions.Count < 2 || !DalamudApi.ClientState.IsLoggedIn)
+        {
+            pathPlaying = false;
+            return;
+        }
+
+        pathTime += dt / Math.Max(Cammy.Config.FreeCamPathDuration, 0.01f);
+        if (pathTime >= 1)
+        {
+            if (Cammy.Config.FreeCamPathLoop)
+            {
+                pathTime %= 1;
+            }
+            else
+            {
+                pathTime = 1;
+                pathPlaying = false;
+            }
+        }
+
+        ApplyPath(pathTime);
+    }
+
+    private static void ApplyPath(float t)
+    {
+        var count = savedPositions.Count;
+        if (count < 2) return;
+
+        // Unwrap the horizontal rotations so that the camera always takes the shortest way around
+        var rotations = new Vector3[count];
+        for (int i = 0; i < count; i++)
+        {
+            var rot = savedPositions[i].Item2;
+            var h = float.DegreesToRadians(rot.X);
+            if (i > 0)
+                h = rotations[i - 1].X + WrapAngle(h - float.DegreesToRadians(savedPositions[i - 1].Item2.X));
+            rotations[i] = new Vector3(h, float.DegreesToRadians(rot.Y), 0);
+        }
+
+        var s = Easing.Ease(t, Cammy.Config.FreeCamPathCurve, Cammy.Config.FreeCamPathDirection) * (count - 1);
+        var segment = Math.Min((int)s, count - 2);
+        var local = s - segment;
+
+        int Index(int i) => Math.Clamp(i, 0, count - 1);
+        Vector3 KeyPosition(int i) => savedPositions[Index(i)].Item1;
+        Vector3 KeyRotation(int i) => rotations[Index(i)];
+
+        position = Easing.CatmullRom(KeyPosition(segment - 1), KeyPosition(segment), KeyPosition(segment + 1), KeyPosition(segment + 2), local);
+        var rotation = Easing.CatmullRom(KeyRotation(segment - 1), KeyRotation(segment), KeyRotation(segment + 1), KeyRotation(segment + 2), local);
+        gameCamera->currentHRotation = WrapAngle(rotation.X);
+        gameCamera->currentVRotation = Math.Clamp(rotation.Y, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
+    }
+
+    private static float WrapAngle(float a) => MathF.IEEERemainder(a, MathF.Tau);
+
+    private static void DrawPathControls()
+    {
+        var save = false;
+        var canPlay = savedPositions.Count >= 2 && DalamudApi.ClientState.IsLoggedIn;
+
+        ImGui.BeginDisabled(!canPlay);
+
+        if (!pathPlaying)
+        {
+            if (ImGui.Button("Play Path"))
+            {
+                pathPlaying = true;
+                if (pathTime >= 1)
+                    pathTime = 0;
+                velocity = Vector3.Zero;
+            }
+        }
+        else if (ImGui.Button("Pause Path"))
+        {
+            pathPlaying = false;
+        }
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+        if (ImGui.SliderFloat("##PathTime", ref pathTime, 0, 1, "%.2f"))
+            ApplyPath(pathTime);
+
+        ImGui.EndDisabled();
+
+        if (!canPlay)
+            ImGui.TextDisabled("Save at least two positions to play a path.");
+
+        var width = ImGui.GetContentRegionAvail().X / 2;
+        ImGui.SetNextItemWidth(width);
+        save |= ImGui.DragFloat("Duration", ref Cammy.Config.FreeCamPathDuration, 0.1f, 0.1f, 600, "%.1f s");
+        ImGui.SameLine();
+        save |= ImGui.Checkbox("Loop", ref Cammy.Config.FreeCamPathLoop);
+
+        ImGui.SetNextItemWidth(width / 2);
+        save |= ImGuiEx.EnumCombo("##PathCurve", ref Cammy.Config.FreeCamPathCurve);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(width / 2);
+        save |= ImGuiEx.EnumCombo("Easing##PathDirection", ref Cammy.Config.FreeCamPathDirection);
+
+        if (save)
+            Cammy.Config.Save();
+    }
+
     public static void Draw()
     {
         if (!Enabled || !Cammy.Config.EnableAdvancedFreeCamControls) return;
 
-        ImGui.SetNextWindowSizeConstraints(new Vector2(300, 200) * ImGuiHelpers.GlobalScale, Vector2.PositiveInfinity);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(300, 320) * ImGuiHelpers.GlobalScale, Vector2.PositiveInfinity);
 
         var useAlpha = Cammy.Config.FadeOutAdvancedFreeCamControls;
         var dt = ImGui.GetIO().DeltaTime;
@@ -341,6 +476,10 @@ public static unsafe class FreeCam
 
         ImGui.Separator();
 
+        DrawPathControls();
+
+        ImGui.Separator();
+
         ImGui.BeginChild("SavedFreeCamPositions");
 
         for (int i = 0; i < savedPositions.Count; i++)
@@ -359,6 +498,7 @@ public static unsafe class FreeCam
 
             if (!clicked) continue;
 
+            pathPlaying = false;
             position = pos;
             Common.CameraManager->worldCamera->currentHRotation = float.DegreesToRadians(rot.X);
             Common.CameraManager->worldCamera->currentVRotation = float.DegreesToRadians(rot.Y);

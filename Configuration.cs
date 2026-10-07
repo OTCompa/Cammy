@@ -63,4 +63,9 @@ public class Configuration : PluginConfiguration, IPluginConfiguration
     public DeathCamSetting DeathCamMode = DeathCamSetting.Disabled;
     public bool EnableAdvancedFreeCamControls = false;
     public bool FadeOutAdvancedFreeCamControls = false;
+    public float FreeCamMovementSmoothing = 0;
+    public float FreeCamPathDuration = 5;
+    public Easing.Curve FreeCamPathCurve = Easing.Curve.Sine;
+    public Easing.Direction FreeCamPathDirection = Easing.Direction.InOut;
+    public bool FreeCamPathLoop = false;
 }
