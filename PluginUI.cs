@@ -389,6 +389,11 @@ public static class PluginUI
 
             save |= ImGui.Checkbox("Enable Advanced Free Cam Controls", ref Cammy.Config.EnableAdvancedFreeCamControls);
 
+            ImGui.TextUnformatted("Free Cam Movement Smoothing");
+            ImGuiEx.Prefix(true);
+            save |= ImGui.SliderFloat("##FreeCamSmoothing", ref Cammy.Config.FreeCamMovementSmoothing, 0, 1, "%.2f s");
+            ImGuiEx.SetItemTooltip("Time it takes for the free cam to accelerate / decelerate. 0 disables smoothing.");
+
             ImGuiEx.EndGroupBox();
         }
 
