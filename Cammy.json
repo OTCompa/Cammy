@@ -13,5 +13,5 @@
   ],
   "InternalName": "Cammy",
   "AssemblyVersion": "9.9.9.9",
-  "Changelog": ""
+  "Changelog": "Fix camera resetting to default on zoning (Thanks to Chat Ja)"
 }
