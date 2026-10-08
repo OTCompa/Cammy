@@ -397,21 +397,22 @@ public static unsafe class FreeCam
     private static float WrapAngle(float a) => MathF.IEEERemainder(a, MathF.Tau);
 
     // Called from the camera position hook, after the game has applied this frame's mouse / stick input to the rotation.
-    // The game's changes are accumulated into a target rotation which the actual rotation then eases towards.
+    // The game's changes are scaled by the sensitivity and accumulated into a target rotation which the actual rotation then eases towards.
     public static void UpdateLookSmoothing(GameCamera* camera)
     {
         if (camera != gameCamera) return;
 
         var smoothing = Cammy.Config.FreeCamLookSmoothing;
-        if (smoothing <= 0 || pathPlaying || lookSmoothingResync)
+        var sensitivity = Cammy.Config.FreeCamLookSensitivity;
+        if ((smoothing <= 0 && sensitivity == 1) || pathPlaying || lookSmoothingResync)
         {
             ResyncLookSmoothing(camera);
             return;
         }
 
         // Rotation since this was last written is input that the game applied
-        lookTarget.X += WrapAngle(camera->currentHRotation - WrapAngle(lookSmoothed.X));
-        lookTarget.Y = Math.Clamp(lookTarget.Y + camera->currentVRotation - lookSmoothedWrittenV, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
+        lookTarget.X += WrapAngle(camera->currentHRotation - WrapAngle(lookSmoothed.X)) * sensitivity;
+        lookTarget.Y = Math.Clamp(lookTarget.Y + (camera->currentVRotation - lookSmoothedWrittenV) * sensitivity, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
 
         // Only advance once per frame in case this is called multiple times
         var frame = DalamudApi.Framework.LastUpdate;

@@ -66,6 +66,7 @@ public class Configuration : PluginConfiguration, IPluginConfiguration
     public bool FadeOutAdvancedFreeCamControls = false;
     public float FreeCamMovementSmoothing = 0;
     public float FreeCamLookSmoothing = 0;
+    public float FreeCamLookSensitivity = 1;
     public float FreeCamPathDuration = 5;
     public Easing.Curve FreeCamPathCurve = Easing.Curve.Sine;
     public Easing.Direction FreeCamPathDirection = Easing.Direction.InOut;

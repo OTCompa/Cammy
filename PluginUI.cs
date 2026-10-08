@@ -422,6 +422,11 @@ public static class PluginUI
             save |= ImGui.SliderFloat("##FreeCamLookSmoothing", ref Cammy.Config.FreeCamLookSmoothing, 0, 1, "%.2f s");
             ImGuiEx.SetItemTooltip("Time it takes for the free cam's rotation to catch up to the mouse / controller. 0 disables smoothing.");
 
+            ImGui.TextUnformatted("Free Cam Look Sensitivity");
+            ImGuiEx.Prefix(true);
+            save |= ImGui.SliderFloat("##FreeCamLookSensitivity", ref Cammy.Config.FreeCamLookSensitivity, 0.05f, 2, "%.2fx", ImGuiSliderFlags.Logarithmic);
+            ImGuiEx.SetItemTooltip("Multiplier on the game's camera rotation speed while in free cam.\nLower values allow slower, more precise pans. Ctrl + Click to type a value.");
+
             ImGui.TextUnformatted("Free Cam Path Play / Pause Hotkey");
             ImGuiEx.Prefix(true);
             save |= HotkeyCombo("##PathPlayKey", ref Cammy.Config.FreeCamPathPlayKey);
