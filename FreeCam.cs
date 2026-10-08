@@ -380,8 +380,8 @@ public static unsafe class FreeCam
         Vector3 KeyPosition(int i) => savedPositions[Index(i)].Item1;
         Vector3 KeyRotation(int i) => rotations[Index(i)];
 
-        position = Easing.CatmullRom(KeyPosition(segment - 1), KeyPosition(segment), KeyPosition(segment + 1), KeyPosition(segment + 2), local);
-        var rotation = Easing.CatmullRom(KeyRotation(segment - 1), KeyRotation(segment), KeyRotation(segment + 1), KeyRotation(segment + 2), local);
+        position = Easing.Spline(KeyPosition(segment - 1), KeyPosition(segment), KeyPosition(segment + 1), KeyPosition(segment + 2), local, Cammy.Config.FreeCamPathCurvature);
+        var rotation = Easing.Spline(KeyRotation(segment - 1), KeyRotation(segment), KeyRotation(segment + 1), KeyRotation(segment + 2), local);
         gameCamera->currentHRotation = WrapAngle(rotation.X);
         gameCamera->currentVRotation = Math.Clamp(rotation.Y, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
     }
@@ -465,6 +465,15 @@ public static unsafe class FreeCam
         save |= ImGui.DragFloat("Duration", ref Cammy.Config.FreeCamPathDuration, 0.1f, 0.1f, 600, "%.1f s");
         ImGui.SameLine();
         save |= ImGui.Checkbox("Loop", ref Cammy.Config.FreeCamPathLoop);
+
+        ImGui.SetNextItemWidth(width);
+        if (ImGui.SliderFloat("Curvature", ref Cammy.Config.FreeCamPathCurvature, 0, 3, "%.2f"))
+        {
+            save = true;
+            if (!pathPlaying && canPlay)
+                ApplyPath(pathTime);
+        }
+        ImGuiEx.SetItemTooltip("How much the path curves through each saved position.\n0 = straight lines (stops at each point), 1 = default, higher = wider curves.");
 
         ImGui.SetNextItemWidth(width / 2);
         save |= ImGuiEx.EnumCombo("##PathCurve", ref Cammy.Config.FreeCamPathCurve);

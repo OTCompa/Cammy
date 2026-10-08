@@ -48,11 +48,14 @@ public static class Easing
         _ => t
     };
 
-    public static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    // Cardinal spline through p1 -> p2. Curvature scales the tangents: 0 = straight lines (stopping at each point), 1 = Catmull-Rom, >1 = wider curves
+    public static Vector3 Spline(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t, float curvature = 1)
     {
         var t2 = t * t;
         var t3 = t2 * t;
-        return 0.5f * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (3 * p1 - p0 - 3 * p2 + p3) * t3);
+        var m1 = (p2 - p0) * (curvature / 2);
+        var m2 = (p3 - p1) * (curvature / 2);
+        return (2 * t3 - 3 * t2 + 1) * p1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * p2 + (t3 - t2) * m2;
     }
 
     // Exponential smoothing that behaves the same regardless of frame rate
