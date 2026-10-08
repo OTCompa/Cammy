@@ -104,6 +104,7 @@ public static unsafe class Game
         }
         else
         {
+            FreeCam.UpdateLookSmoothing(camera);
             *position = FreeCam.Position;
         }
     }

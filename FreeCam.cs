@@ -44,6 +44,11 @@ public static unsafe class FreeCam
     private static float pathTime;
     private static bool playKeyHeld;
     private static bool resetKeyHeld;
+    private static Vector2 lookTarget;
+    private static Vector2 lookSmoothed;
+    private static float lookSmoothedWrittenV;
+    private static bool lookSmoothingResync = true;
+    private static DateTime lastLookSmoothingFrame;
 
     private enum FreeCamBindings
     {
@@ -109,6 +114,7 @@ public static unsafe class FreeCam
             speed = 1;
             velocity = Vector3.Zero;
             pathPlaying = false;
+            lookSmoothingResync = true;
             position = new(gameCamera->viewX, gameCamera->viewY, gameCamera->viewZ);
             onDeath = death;
             prevPresetOverride = PresetManager.PresetOverride;
@@ -361,6 +367,8 @@ public static unsafe class FreeCam
         var count = savedPositions.Count;
         if (count < 2) return;
 
+        lookSmoothingResync = true;
+
         // Unwrap the horizontal rotations so that the camera always takes the shortest way around
         var rotations = new Vector3[count];
         for (int i = 0; i < count; i++)
@@ -388,7 +396,47 @@ public static unsafe class FreeCam
 
     private static float WrapAngle(float a) => MathF.IEEERemainder(a, MathF.Tau);
 
-    private static bool CanPlayPath => savedPositions.Count >= 2 && DalamudApi.ClientState.IsLoggedIn;
+    // Called from the camera position hook, after the game has applied this frame's mouse / stick input to the rotation.
+    // The game's changes are accumulated into a target rotation which the actual rotation then eases towards.
+    public static void UpdateLookSmoothing(GameCamera* camera)
+    {
+        if (camera != gameCamera) return;
+
+        var smoothing = Cammy.Config.FreeCamLookSmoothing;
+        if (smoothing <= 0 || pathPlaying || lookSmoothingResync)
+        {
+            ResyncLookSmoothing(camera);
+            return;
+        }
+
+        // Rotation since this was last written is input that the game applied
+        lookTarget.X += WrapAngle(camera->currentHRotation - WrapAngle(lookSmoothed.X));
+        lookTarget.Y = Math.Clamp(lookTarget.Y + camera->currentVRotation - lookSmoothedWrittenV, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
+
+        // Only advance once per frame in case this is called multiple times
+        var frame = DalamudApi.Framework.LastUpdate;
+        if (frame != lastLookSmoothingFrame)
+        {
+            lastLookSmoothingFrame = frame;
+            lookSmoothed = Vector2.Lerp(lookSmoothed, lookTarget, Easing.SmoothingFactor(smoothing, (float)DalamudApi.Framework.UpdateDelta.TotalSeconds));
+
+            var turns = MathF.Round(lookSmoothed.X / MathF.Tau) * MathF.Tau;
+            lookSmoothed.X -= turns;
+            lookTarget.X -= turns;
+        }
+
+        camera->currentHRotation = WrapAngle(lookSmoothed.X);
+        camera->currentVRotation = lookSmoothedWrittenV = Math.Clamp(lookSmoothed.Y, freeCamPreset.MinVRotation, freeCamPreset.MaxVRotation);
+    }
+
+    private static void ResyncLookSmoothing(GameCamera* camera)
+    {
+        lookTarget = lookSmoothed = new Vector2(camera->currentHRotation, camera->currentVRotation);
+        lookSmoothedWrittenV = camera->currentVRotation;
+        lookSmoothingResync = false;
+    }
+
+    private static bool CanPlayPath =>savedPositions.Count >= 2 && DalamudApi.ClientState.IsLoggedIn;
 
     private static void TogglePath()
     {
@@ -417,6 +465,7 @@ public static unsafe class FreeCam
 
     private static void GoToSavedPosition(Vector3 pos, Vector2 rot)
     {
+        lookSmoothingResync = true;
         position = pos;
         velocity = Vector3.Zero;
         gameCamera->currentHRotation = float.DegreesToRadians(rot.X);
@@ -509,6 +558,7 @@ public static unsafe class FreeCam
         {
             Common.CameraManager->worldCamera->currentHRotation = float.DegreesToRadians(rotation.X);
             Common.CameraManager->worldCamera->currentVRotation = float.DegreesToRadians(rotation.Y);
+            lookSmoothingResync = true;
         }
 
         if (ImGui.Button("Save Position"))
