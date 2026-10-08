@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 
@@ -344,6 +345,28 @@ public static class PluginUI
             "\nPlease see the \"Other Settings\" tab to verify if QoL Bar was detected.");
     }
 
+    private static bool HotkeyCombo(string label, ref VirtualKey key)
+    {
+        if (!ImGui.BeginCombo(label, key == VirtualKey.NO_KEY ? "None" : key.GetFancyName())) return false;
+
+        var ret = false;
+        if (ImGui.Selectable("None", key == VirtualKey.NO_KEY))
+        {
+            key = VirtualKey.NO_KEY;
+            ret = true;
+        }
+
+        foreach (var k in DalamudApi.KeyState.GetValidVirtualKeys())
+        {
+            if (k == VirtualKey.NO_KEY || !ImGui.Selectable(k.GetFancyName(), k == key)) continue;
+            key = k;
+            ret = true;
+        }
+
+        ImGui.EndCombo();
+        return ret;
+    }
+
     private static unsafe void DrawOtherSettings()
     {
         var save = false;
@@ -393,6 +416,15 @@ public static class PluginUI
             ImGuiEx.Prefix(true);
             save |= ImGui.SliderFloat("##FreeCamSmoothing", ref Cammy.Config.FreeCamMovementSmoothing, 0, 1, "%.2f s");
             ImGuiEx.SetItemTooltip("Time it takes for the free cam to accelerate / decelerate. 0 disables smoothing.");
+
+            ImGui.TextUnformatted("Free Cam Path Play / Pause Hotkey");
+            ImGuiEx.Prefix(true);
+            save |= HotkeyCombo("##PathPlayKey", ref Cammy.Config.FreeCamPathPlayKey);
+
+            ImGui.TextUnformatted("Free Cam Path Reset Hotkey");
+            ImGuiEx.Prefix(true);
+            save |= HotkeyCombo("##PathResetKey", ref Cammy.Config.FreeCamPathResetKey);
+            ImGuiEx.SetItemTooltip("Stops the path and moves the camera to the first saved position.");
 
             ImGuiEx.EndGroupBox();
         }

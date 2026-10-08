@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Interface;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Hypostasis.Game.Structures;
 
@@ -40,6 +42,8 @@ public static unsafe class FreeCam
     private static Vector3 velocity;
     private static bool pathPlaying = false;
     private static float pathTime;
+    private static bool playKeyHeld;
+    private static bool resetKeyHeld;
 
     private enum FreeCamBindings
     {
@@ -217,6 +221,17 @@ public static unsafe class FreeCam
 
         var dt = (float)DalamudApi.Framework.UpdateDelta.TotalSeconds;
 
+        // Read every frame so that the held state stays current even while typing
+        var playPressed = WasHotkeyPressed(Cammy.Config.FreeCamPathPlayKey, ref playKeyHeld);
+        var resetPressed = WasHotkeyPressed(Cammy.Config.FreeCamPathResetKey, ref resetKeyHeld);
+        if (!RaptureAtkModule.Instance()->AtkModule.IsTextInputActive())
+        {
+            if (resetPressed)
+                ResetPath();
+            if (playPressed)
+                TogglePath();
+        }
+
         if (pathPlaying)
         {
             UpdatePath(dt);
@@ -373,27 +388,67 @@ public static unsafe class FreeCam
 
     private static float WrapAngle(float a) => MathF.IEEERemainder(a, MathF.Tau);
 
+    private static bool CanPlayPath => savedPositions.Count >= 2 && DalamudApi.ClientState.IsLoggedIn;
+
+    private static void TogglePath()
+    {
+        if (pathPlaying)
+        {
+            pathPlaying = false;
+            return;
+        }
+
+        if (!CanPlayPath) return;
+
+        pathPlaying = true;
+        if (pathTime >= 1)
+            pathTime = 0;
+        velocity = Vector3.Zero;
+    }
+
+    private static void ResetPath()
+    {
+        if (savedPositions.Count == 0 || !DalamudApi.ClientState.IsLoggedIn) return;
+
+        pathPlaying = false;
+        pathTime = 0;
+        GoToSavedPosition(savedPositions[0].Item1, savedPositions[0].Item2);
+    }
+
+    private static void GoToSavedPosition(Vector3 pos, Vector2 rot)
+    {
+        position = pos;
+        velocity = Vector3.Zero;
+        gameCamera->currentHRotation = float.DegreesToRadians(rot.X);
+        gameCamera->currentVRotation = float.DegreesToRadians(rot.Y);
+    }
+
+    private static bool WasHotkeyPressed(VirtualKey key, ref bool held)
+    {
+        var down = key != VirtualKey.NO_KEY && DalamudApi.KeyState.IsVirtualKeyValid(key) && DalamudApi.KeyState[key];
+        var pressed = down && !held;
+        held = down;
+        return pressed;
+    }
+
+    private static string GetHotkeyTooltip(VirtualKey key) => key == VirtualKey.NO_KEY ? "No hotkey set" : $"Hotkey: {key.GetFancyName()}";
+
     private static void DrawPathControls()
     {
         var save = false;
-        var canPlay = savedPositions.Count >= 2 && DalamudApi.ClientState.IsLoggedIn;
+        var canPlay = CanPlayPath;
 
         ImGui.BeginDisabled(!canPlay);
 
-        if (!pathPlaying)
-        {
-            if (ImGui.Button("Play Path"))
-            {
-                pathPlaying = true;
-                if (pathTime >= 1)
-                    pathTime = 0;
-                velocity = Vector3.Zero;
-            }
-        }
-        else if (ImGui.Button("Pause Path"))
-        {
-            pathPlaying = false;
-        }
+        if (ImGui.Button(pathPlaying ? "Pause Path" : "Play Path"))
+            TogglePath();
+        ImGuiEx.SetItemTooltip(GetHotkeyTooltip(Cammy.Config.FreeCamPathPlayKey));
+
+        ImGui.SameLine();
+
+        if (ImGui.Button("Reset"))
+            ResetPath();
+        ImGuiEx.SetItemTooltip(GetHotkeyTooltip(Cammy.Config.FreeCamPathResetKey));
 
         ImGui.SameLine();
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
@@ -495,9 +550,7 @@ public static unsafe class FreeCam
             if (!clicked) continue;
 
             pathPlaying = false;
-            position = pos;
-            Common.CameraManager->worldCamera->currentHRotation = float.DegreesToRadians(rot.X);
-            Common.CameraManager->worldCamera->currentVRotation = float.DegreesToRadians(rot.Y);
+            GoToSavedPosition(pos, rot);
         }
 
         ImGui.EndChild();

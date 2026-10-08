@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using Dalamud.Configuration;
+using Dalamud.Game.ClientState.Keys;
 
 namespace Cammy;
 
@@ -68,4 +69,6 @@ public class Configuration : PluginConfiguration, IPluginConfiguration
     public Easing.Curve FreeCamPathCurve = Easing.Curve.Sine;
     public Easing.Direction FreeCamPathDirection = Easing.Direction.InOut;
     public bool FreeCamPathLoop = false;
+    public VirtualKey FreeCamPathPlayKey = VirtualKey.PAUSE;
+    public VirtualKey FreeCamPathResetKey = VirtualKey.HOME;
 }
